@@ -1,0 +1,17 @@
+#cloud-config
+hostname: ${VM_HOSTNAME}
+manage_etc_hosts: true
+users:
+  - name: ${VM_USER}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+chpasswd:
+  list: |
+    ${VM_USER}:${VM_PASSWORD}
+  expire: false
+ssh_pwauth: true
+packages:
+  - openssh-server
+  - qemu-guest-agent
+runcmd:
+  - systemctl enable --now qemu-guest-agent ssh

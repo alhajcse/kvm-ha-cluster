@@ -1,0 +1,10 @@
+version: 2
+ethernets:
+  enp1s0:
+    dhcp4: false
+    addresses: [${VM_IP}/${NETWORK_CIDR}]
+    routes:
+      - to: default
+        via: ${GATEWAY_IP}
+    nameservers:
+      addresses: [${DNS_SERVERS}]
