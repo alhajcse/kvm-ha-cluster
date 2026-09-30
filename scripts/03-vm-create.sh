@@ -111,5 +111,21 @@ echo "✅ VM $VM_NAME created. Waiting 90s for boot..."
 sleep 90
 
 sudo virsh list
+
+echo -e "Enabling auto-start..."
+sudo virsh autostart "$VM_NAME"
+echo -e "Auto-start enabled"
+
+# Verify symlink
+if [[ -L "/etc/libvirt/qemu/autostart/${VM_NAME}.xml" ]]; then
+  echo -e "  Symlink created"
+else
+  echo -e "  Symlink not found (but autostart set)"
+fi
+
+echo ""
+echo "=== Autostart List ==="
+sudo virsh list --autostart 2>/dev/null | tail -n +3 | sed 's/^/  /'
+
 echo ""
 ping -c 3 -W 2 "$VM_IP" && echo "✅ $VM_IP OK" || echo "⚠️ Retry in 30s"
