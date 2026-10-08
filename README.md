@@ -25,6 +25,7 @@
 12. [Recovery](#12-recovery)
 13. [Security](#13-security)
 14. [Roadmap](#14-roadmap)
+15. [Change VM Network Configuration](#15-change-vm-network-configuration)
 
 ---
 
@@ -790,7 +791,6 @@ graph TB
     style L4 fill:#e6f2ff,stroke:#333
     style L5 fill:#f0e6ff,stroke:#333
 ```
-
 ### 14.2 Phases
 
 | Phase | Task | Time |
@@ -803,6 +803,221 @@ graph TB
 | 🔮 | Prometheus + Grafana | 3 hr |
 
 ---
+
+## 15. Change VM Network Configuration
+
+**Purpose:** Safely verify a VM's MAC/IP configuration, update a static Netplan configuration, apply it, validate connectivity, and recover from a failed change.
+
+**Audience:** System Administrators / DevOps / Senior Engineers
+
+> **Safety:** Confirm console/management access before changing network configuration. A wrong IP, gateway, interface name, or YAML indentation can disconnect the VM.
+
+## 15.1. Pre-Change: Identify MAC, IP & Netplan
+
+### Check current neighbor table
+```bash
+ip neigh
+```
+
+### Check interface MAC
+```bash
+cat /sys/class/net/enp1s0/address
+```
+
+### Inspect Netplan
+```bash
+ls -l /etc/netplan/
+sudo netplan get
+sudo cat /etc/netplan/50-cloud-init.yaml
+```
+
+**checks**
+- Confirm the intended interface is `enp1s0`.
+- Confirm approved static IP, CIDR/prefix, gateway and DNS.
+- Check for multiple Netplan files defining the same interface.
+- If network-team IP/MAC binding exists, verify the approved IP is mapped to this VM's MAC.
+
+## 15.2. Backup Before Modification
+
+```bash
+sudo cp /etc/netplan/50-cloud-init.yaml \
+        /etc/netplan/50-cloud-init.yaml.backup
+```
+
+Edit:
+```bash
+sudo nano /etc/netplan/50-cloud-init.yaml
+```
+
+Example static configuration (**replace values with approved settings**):
+
+```yaml
+network:
+  version: 2
+  ethernets:
+    enp1s0:
+      dhcp4: false
+      addresses:
+        - x.x.x.202/21
+      routes:
+        - to: default
+          via: x.x.x.1
+      nameservers:
+        addresses:
+          - x.x.x.1
+          - 8.8.8.8
+```
+
+> **Do not blindly use the example IP.** The address must be reserved/approved for this VM.
+
+## 15.3. Validate & Apply
+
+```bash
+sudo netplan generate
+sudo netplan apply
+```
+
+For risky remote changes, prefer `sudo netplan try` where appropriate, because it provides a rollback path if connectivity is lost.
+
+**Change flow:**
+
+`Backup → Edit → netplan generate → Apply → Verify`
+
+## 15.4. Post-Change Verification
+
+### IP
+```bash
+ip addr show enp1s0
+```
+Confirm interface is UP and expected IP/CIDR is present.
+
+### Route
+```bash
+ip route
+```
+
+Expected pattern:
+```text
+default via 10.70.16.1 dev enp1s0
+10.70.16.0/21 dev enp1s0 ...
+```
+
+### Link
+```bash
+ip link show enp1s0
+```
+
+Confirm the interface is `UP`.
+
+## 15.5. Connectivity Tests — In This Order
+
+### 15.5.1) Gateway
+```bash
+ping -c 2 10.70.16.1
+```
+If this fails, stop and investigate interface, VLAN/L2, ARP, IP/MAC binding, subnet and gateway.
+
+### 15.5.2) Public IP
+```bash
+ping -c 2 8.8.8.8
+```
+If gateway works but this fails, investigate routing, firewall, NAT and upstream connectivity.
+
+### 15.5.3) DNS
+```bash
+ping -c 2 google.com
+```
+If `8.8.8.8` works but `google.com` fails, investigate DNS.
+
+### Decision Tree
+```text
+Interface UP?
+  └─ No → Fix interface/config
+  ↓
+Correct IP?
+  └─ No → Fix Netplan
+  ↓
+Gateway reachable?
+  └─ No → Check ARP/VLAN/IP-MAC binding/gateway
+  ↓
+8.8.8.8 reachable?
+  └─ No → Check route/firewall/NAT/upstream
+  ↓
+google.com resolves?
+  └─ No → Check DNS
+  ↓
+Network configuration validated
+```
+
+# 15.6. Recovery / Rollback
+
+Restore the **same backup that corresponds to the file changed**:
+
+```bash
+sudo cp /etc/netplan/50-cloud-init.yaml.backup \
+        /etc/netplan/50-cloud-init.yaml
+
+sudo netplan generate
+sudo netplan apply
+```
+
+### Important correction
+
+The supplied backup command creates:
+
+```text
+/etc/netplan/50-cloud-init.yaml.backup
+```
+
+but the supplied recovery command references:
+
+```text
+/etc/netplan/99-static.yaml.backup
+```
+
+These are different files. Do not mix them.
+
+If the intended file is `99-static.yaml`, back it up first:
+
+```bash
+sudo cp /etc/netplan/99-static.yaml \
+        /etc/netplan/99-static.yaml.backup
+```
+
+Then restore:
+
+```bash
+sudo cp /etc/netplan/99-static.yaml.backup \
+        /etc/netplan/99-static.yaml
+
+sudo netplan generate
+sudo netplan apply
+```
+
+# 15.7. Change Checklist
+
+- [ ] VM MAC verified.
+- [ ] Approved IP confirmed.
+- [ ] Correct interface identified.
+- [ ] Correct subnet/prefix configured.
+- [ ] Correct gateway configured.
+- [ ] DNS configured.
+- [ ] Netplan file conflicts checked.
+- [ ] Backup created and path recorded.
+- [ ] `netplan generate` succeeds.
+- [ ] Interface is UP.
+- [ ] Expected IP is present.
+- [ ] Default route is correct.
+- [ ] Gateway ping succeeds.
+- [ ] External IP connectivity succeeds.
+- [ ] DNS resolution succeeds.
+- [ ] Rollback procedure is known before change.
+
+> **Golden Rule:** `netplan apply` is not the end of the change. The change is complete only after IP, route, gateway, external connectivity and DNS have been verified.
+
+
+
+
 
 ## Appendix A: Command Reference
 
@@ -875,7 +1090,7 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** 1.0
+**Version:** 1.1
 **Last Updated:** 2026-09-28
-**Maintainer:** [Your Name]
+**Maintainer:** Alhaj
 
