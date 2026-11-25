@@ -19,7 +19,7 @@ The structure is sound: one dispatcher, numbered scripts, a per-host `.env`, and
 |---|:-:|---|
 | 🔴 High | 5 | Bridge setup can strand a remote host with no auto-rollback. `kvm-ok` is never installed. Partial image download is treated as valid. Plaintext password in world-readable `/tmp`. Default weak password with SSH password auth open on the LAN. |
 | 🟠 Medium | 9 | Substring matching bugs, STP delay likely causing the "race condition", rollback ignores VMs, fragile NIC auto-detection, dead and drifting templates, and more. |
-| 🟡 Low | 9 | Doc/code drift, missing files, no CI, and similar. |
+| 🟡 Low | 10 | Doc/code drift, missing files, no CI, and similar. |
 
 **Verdict:** fine for a lab where someone sits at the console. **Not ready** to run unattended or on hosts that matter until the 🔴 items are fixed.
 
